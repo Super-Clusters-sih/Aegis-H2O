@@ -118,7 +118,7 @@ class SensorData(BaseModel):
 # HOME
 # ==================================================
 
-@app.get("/")
+@app.get("/api")
 def home():
 
     return {
@@ -128,12 +128,11 @@ def home():
         "database": "connected"
     }
 
-
 # ==================================================
 # PREDICTION
 # ==================================================
 
-@app.post("/predict")
+@app.post("/api/predict")
 def predict(data: SensorData):
 
     sensor_input = pd.DataFrame([{
@@ -276,7 +275,7 @@ def predict(data: SensorData):
         "database": "reading saved"
     }
     
-@app.get("/latest")
+@app.get("/api/latest")
 def get_latest_reading():
     from sqlalchemy.orm import Session
 
@@ -314,7 +313,7 @@ def get_latest_reading():
     finally:
         db.close()
         
-@app.get("/history")
+@app.get("/api/history")
 def get_history():
     from sqlalchemy.orm import Session
 
@@ -347,3 +346,11 @@ def get_history():
 
     finally:
         db.close()
+        
+# ==================================================
+# SENSOR DATA INPUT
+# ==================================================
+
+@app.post("/api/sensor-data")
+def receive_sensor_data(data: SensorData):
+    return predict(data)

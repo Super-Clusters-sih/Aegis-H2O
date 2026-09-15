@@ -50,7 +50,7 @@ export default function Home() {
     const fetchLatest = async () => {
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/latest"
+         "/api/latest"
         );
 
         if (!response.ok) {
@@ -70,7 +70,7 @@ export default function Home() {
     const fetchHistory = async () => {
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/history"
+          "/api/history"
         );
 
         if (!response.ok) {
