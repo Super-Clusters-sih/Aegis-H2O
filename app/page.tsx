@@ -49,9 +49,10 @@ export default function Home() {
   useEffect(() => {
     const fetchLatest = async () => {
       try {
-        const response = await fetch(
-         "/api/latest"
-        );
+       const response = await fetch(
+  "/api/latest",
+  { cache: "no-store" }
+);
 
         if (!response.ok) {
           throw new Error("API request failed");
@@ -69,9 +70,10 @@ export default function Home() {
 
     const fetchHistory = async () => {
       try {
-        const response = await fetch(
-          "/api/history"
-        );
+      const response = await fetch(
+  "/api/history",
+  { cache: "no-store" }
+);
 
         if (!response.ok) {
           throw new Error("History API request failed");
