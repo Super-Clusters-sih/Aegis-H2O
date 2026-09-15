@@ -64,3 +64,7 @@ env/
 .DS_Store
 Thumbs.db
 models/*_300_backup.pkl
+.vercel/
+.env*
+
+_uv/
