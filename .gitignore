@@ -30,3 +30,5 @@ Thumbs.db
 
 # Large video files
 DOCS/*.mp4
+# Local documentation and presentation files
+DOCS/
