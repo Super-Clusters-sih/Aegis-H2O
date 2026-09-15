@@ -63,3 +63,4 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+models/*_300_backup.pkl
