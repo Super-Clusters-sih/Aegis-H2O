@@ -68,3 +68,6 @@ models/*_300_backup.pkl
 .env*
 
 _uv/
+
+.env*
+!.env.example
