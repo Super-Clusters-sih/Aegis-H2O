@@ -28,7 +28,9 @@ async function getAdminContext(): Promise<AdminContext> {
 export async function GET() {
   try {
     const context = await getAdminContext();
-    if (!context.ok) return context.response;
+    if ("response" in context) {
+  return context.response;
+}
     const response = await fetch(`${BACKEND_URL}/api/admin/companies`, {
       headers: { "x-admin-key": context.adminKey },
       cache: "no-store",
@@ -44,7 +46,9 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const context = await getAdminContext();
-    if (!context.ok) return context.response;
+    if ("response" in context) {
+      return context.response;
+    }
     const body = await request.json();
     const companyId = Number(body.company_id);
     const status = body.status;

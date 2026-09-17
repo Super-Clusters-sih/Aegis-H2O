@@ -631,8 +631,7 @@ const chartData = history
 
             </div>
 
-            <UserButton afterSignOutUrl="/sign-in" />
-
+            <UserButton />
           </div>
 
         </header>
