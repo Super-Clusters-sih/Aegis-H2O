@@ -142,7 +142,22 @@ export default function Home() {
   };
 
   const sensor = data?.sensor_data;
-  const prediction = data?.prediction;
+const prediction = data?.prediction;
+
+const chartData = history
+  .filter(
+    (reading) =>
+      reading.ph !== null &&
+      reading.ph !== undefined &&
+      Number.isFinite(Number(reading.ph))
+  )
+  .map((reading, index) => ({
+    ...reading,
+    ph: Number(reading.ph),
+    chartTime: reading.timestamp
+      ? new Date(reading.timestamp).getTime()
+      : reading.id ?? index,
+  }));
 
   return (
     <>
@@ -916,7 +931,7 @@ export default function Home() {
                   >
 
                     <LineChart
-                      data={history}
+                      data={chartData}
                       margin={{
                         top: 12,
                         right: 12,
@@ -932,12 +947,9 @@ export default function Home() {
                       />
 
                       <XAxis
-                        dataKey="timestamp"
-                        tickFormatter={(value) =>
-                          new Date(
-                            String(value)
-                          ).toLocaleTimeString()
-                        }
+                        dataKey="chartTime"
+                       tickFormatter={(value) => new Date(Number(value)).toLocaleTimeString()
+                       }
                         stroke="#94a3b8"
                         fontSize={10}
                         tickLine={false}
@@ -956,10 +968,8 @@ export default function Home() {
                       />
 
                       <Tooltip
-                        labelFormatter={(value) =>
-                          new Date(
-                            String(value)
-                          ).toLocaleTimeString()
+                        labelFormatter={(value) => 
+                          new Date(Number(value)).toLocaleTimeString()
                         }
                         contentStyle={{
                           backgroundColor:
