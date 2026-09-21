@@ -1,26 +1,362 @@
 @import "tailwindcss";
 
+/* ==================================================
+   DESIGN TOKENS — Light Mode (default)
+================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --surface-page: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f8fafc;
+  --surface-sidebar: #ffffff;
+  --surface-input: #ffffff;
+  --surface-hover: #f1f5f9;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-placeholder: #cbd5e1;
+
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-focus: #14b8a6;
+
+  /* Brand */
+  --brand-teal: #14b8a6;
+  --brand-violet: #8b5cf6;
+  --brand-cyan: #06b6d4;
+
+  /* Status */
+  --status-safe-bg: #ecfdf5;
+  --status-safe-text: #065f46;
+  --status-safe-border: #a7f3d0;
+  --status-moderate-bg: #fffbeb;
+  --status-moderate-text: #92400e;
+  --status-moderate-border: #fcd34d;
+  --status-unsafe-bg: #fef2f2;
+  --status-unsafe-text: #991b1b;
+  --status-unsafe-border: #fca5a5;
+  --status-pending-bg: #fffbeb;
+  --status-pending-text: #92400e;
+  --status-rejected-bg: #fef2f2;
+  --status-rejected-text: #991b1b;
+  --status-suspended-bg: #fff7ed;
+  --status-suspended-text: #9a3412;
+
+  /* Sidebar */
+  --sidebar-width: 240px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ==================================================
+   DESIGN TOKENS — Dark Mode
+================================================== */
+
+[data-theme="dark"] {
+  --surface-page: #0a0f1e;
+  --surface-card: #111827;
+  --surface-card-hover: #1f2937;
+  --surface-sidebar: #0f172a;
+  --surface-input: #1f2937;
+  --surface-hover: #1f2937;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-placeholder: #475569;
+
+  --border-default: #1f2937;
+  --border-strong: #374151;
+  --border-focus: #14b8a6;
+
+  --status-safe-bg: #064e3b;
+  --status-safe-text: #6ee7b7;
+  --status-safe-border: #065f46;
+  --status-moderate-bg: #78350f;
+  --status-moderate-text: #fcd34d;
+  --status-moderate-border: #92400e;
+  --status-unsafe-bg: #7f1d1d;
+  --status-unsafe-text: #fca5a5;
+  --status-unsafe-border: #991b1b;
+  --status-pending-bg: #78350f;
+  --status-pending-text: #fcd34d;
+  --status-rejected-bg: #7f1d1d;
+  --status-rejected-text: #fca5a5;
+  --status-suspended-bg: #7c2d12;
+  --status-suspended-text: #fdba74;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ==================================================
+   BASE
+================================================== */
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  margin: 0;
+}
+
+/* ==================================================
+   SCROLLBAR
+================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #14b8a6, #8b5cf6);
+  border-radius: 999px;
+}
+
+/* ==================================================
+   SHARED UTILITY CLASSES
+================================================== */
+
+/* Rainbow gradient text — used across all pages */
+.rainbow-text {
+  background: linear-gradient(
+    90deg,
+    #0f766e,
+    #0891b2,
+    #2563eb,
+    #7c3aed,
+    #db2777
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Live pulse dot */
+@keyframes livePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35); }
+  70%  { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.live-pulse {
+  animation: livePulse 2s infinite;
+}
+
+/* Shimmer */
+@keyframes shimmer {
+  0%   { transform: translateX(-130%); }
+  100% { transform: translateX(130%); }
+}
+
+.shimmer {
+  animation: shimmer 2.5s infinite;
+}
+
+/* Float animations */
+@keyframes floatOne {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%       { transform: translate3d(18px, -24px, 0); }
+}
+
+@keyframes floatTwo {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%       { transform: translate3d(-20px, 20px, 0); }
+}
+
+@keyframes floatThree {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%       { transform: translate3d(12px, 25px, 0); }
+}
+
+.float-one   { animation: floatOne   8s ease-in-out infinite; }
+.float-two   { animation: floatTwo  10s ease-in-out infinite; }
+.float-three { animation: floatThree 7s ease-in-out infinite; }
+
+/* Wave */
+@keyframes wave {
+  0%   { transform: translateX(-4%); }
+  50%  { transform: translateX(4%); }
+  100% { transform: translateX(-4%); }
+}
+
+.wave-animation {
+  animation: wave 7s ease-in-out infinite;
+}
+
+/* Card hover lift */
+.premium-card {
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.premium-card:hover {
+  transform: translateY(-6px);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.09),
+    0 6px 20px rgba(15, 23, 42, 0.04);
+}
+
+/* Sensor card hover */
+.sensor-card {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease;
+}
+
+.sensor-card:hover {
+  transform: translateY(-7px) scale(1.012);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+}
+
+/* Gradient border */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    rgba(20, 184, 166, 0.22),
+    rgba(59, 130, 246, 0.16),
+    rgba(139, 92, 246, 0.22),
+    rgba(244, 63, 94, 0.13)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Hero grid background */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Table row hover */
+.table-row {
+  transition: background-color 0.2s ease;
+}
+
+.table-row:hover {
+  background: var(--surface-hover);
+}
+
+/* Shine button */
+.shine-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-button::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 70%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: left 0.55s ease;
+}
+
+.shine-button:hover::after {
+  left: 140%;
+}
+
+/* Mobile hero title */
+@media (max-width: 640px) {
+  .hero-title {
+    font-size: 2.1rem;
+    line-height: 1.08;
+  }
+}
+
+/* ==================================================
+   TOAST ANIMATIONS
+================================================== */
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 120px;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(110%);
+    max-height: 0;
+    margin-bottom: 0;
+  }
+}
+
+.toast-enter {
+  animation: toastIn 0.3s ease forwards;
+}
+
+.toast-exit {
+  animation: toastOut 0.35s ease forwards;
+}
+
+/* ==================================================
+   SIDEBAR
+================================================== */
+
+@keyframes sidebarSlideIn {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+.sidebar-mobile-open {
+  animation: sidebarSlideIn 0.25s ease forwards;
 }

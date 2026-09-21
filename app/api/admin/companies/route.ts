@@ -107,6 +107,10 @@ export async function PATCH(request: NextRequest) {
 
     const companyId = Number(body.company_id);
     const status = body.status;
+    const rejectionReason =
+      typeof body.rejection_reason === "string"
+        ? body.rejection_reason.trim()
+        : null;
 
     const allowedStatuses = [
       "pending",
@@ -125,6 +129,28 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (status === "rejected" && (!rejectionReason || rejectionReason.length < 3)) {
+      return NextResponse.json(
+        { detail: "A valid rejection reason is required (minimum 3 characters)" },
+        { status: 400 }
+      );
+    }
+
+    const payload: {
+      status: string;
+      approved_by?: string;
+      rejection_reason?: string | null;
+    } = {
+      status,
+    };
+
+    if (status === "approved") {
+      payload.approved_by = context.userId;
+      payload.rejection_reason = null;
+    } else if (status === "rejected") {
+      payload.rejection_reason = rejectionReason;
+    }
+
     const response = await fetch(
       `${BACKEND_URL}/api/admin/companies/${companyId}`,
       {
@@ -133,12 +159,37 @@ export async function PATCH(request: NextRequest) {
           "Content-Type": "application/json",
           "x-admin-key": context.adminKey,
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
         cache: "no-store",
       }
     );
 
     const data = await response.json();
+
+    if (response.ok) {
+      // Record in admin audit log
+      try {
+        await fetch(`${BACKEND_URL}/api/admin/audit-log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-key": context.adminKey,
+          },
+          body: JSON.stringify({
+            admin_clerk_id: context.userId,
+            action: `COMPANY_STATUS_${status.toUpperCase()}`,
+            target_company_id: companyId,
+            notes:
+              status === "rejected"
+                ? `Rejected with reason: ${rejectionReason}`
+                : `Status updated to ${status} by admin`,
+          }),
+          cache: "no-store",
+        });
+      } catch (logErr) {
+        console.error("Failed to write to admin audit log:", logErr);
+      }
+    }
 
     return NextResponse.json(data, {
       status: response.status,

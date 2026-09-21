@@ -10,7 +10,7 @@ from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 # ==================================================
@@ -21,6 +21,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 AEGIS_ADMIN_API_KEY = os.getenv("AEGIS_ADMIN_API_KEY")
+AEGIS_FRONTEND_URL = os.getenv("AEGIS_FRONTEND_URL", "")
 
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not configured")
@@ -33,6 +34,10 @@ def get_db_connection():
 def create_table():
     with get_db_connection() as connection:
         with connection.cursor() as cursor:
+
+            # ------------------------------------------
+            # sensor_readings — unchanged
+            # ------------------------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sensor_readings (
                     id SERIAL PRIMARY KEY,
@@ -47,6 +52,9 @@ def create_table():
                 )
             """)
 
+            # ------------------------------------------
+            # companies — base table (unchanged columns)
+            # ------------------------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS companies (
                     id SERIAL PRIMARY KEY,
@@ -68,6 +76,85 @@ def create_table():
                 )
             """)
 
+            # ------------------------------------------
+            # companies — add new optional columns
+            # (idempotent via DO block)
+            # ------------------------------------------
+            cursor.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'companies'
+                          AND column_name = 'full_name'
+                    ) THEN
+                        ALTER TABLE companies
+                            ADD COLUMN full_name VARCHAR(255);
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'companies'
+                          AND column_name = 'org_type'
+                    ) THEN
+                        ALTER TABLE companies
+                            ADD COLUMN org_type VARCHAR(100);
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'companies'
+                          AND column_name = 'reason_for_access'
+                    ) THEN
+                        ALTER TABLE companies
+                            ADD COLUMN reason_for_access TEXT;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'companies'
+                          AND column_name = 'rejection_reason'
+                    ) THEN
+                        ALTER TABLE companies
+                            ADD COLUMN rejection_reason TEXT;
+                    END IF;
+                END
+                $$;
+            """)
+
+            # ------------------------------------------
+            # contact_messages
+            # ------------------------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS contact_messages (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(255),
+                    name VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    subject VARCHAR(500) NOT NULL,
+                    message TEXT NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'unread'
+                        CHECK (status IN ('unread', 'in_progress', 'resolved')),
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # ------------------------------------------
+            # admin_audit_log
+            # ------------------------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS admin_audit_log (
+                    id SERIAL PRIMARY KEY,
+                    admin_clerk_id VARCHAR(255) NOT NULL,
+                    action VARCHAR(100) NOT NULL,
+                    target_company_id INTEGER,
+                    target_message_id INTEGER,
+                    notes TEXT,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
         connection.commit()
 
 
@@ -80,17 +167,21 @@ create_table()
 
 app = FastAPI(
     title="Aegis H2O API",
-    description="Water health, filter status, and company approval API",
-    version="1.1.0"
+    description="Water health, filter status, company approval, and contact API",
+    version="1.2.0"
 )
 
+# Build CORS origins list
+_cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if AEGIS_FRONTEND_URL:
+    _cors_origins.append(AEGIS_FRONTEND_URL.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,6 +191,7 @@ app.add_middleware(
 # ==================================================
 # LOAD ML MODELS
 # ==================================================
+# DO NOT MODIFY — trained model files are fixed
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = BASE_DIR / "models"
@@ -139,11 +231,35 @@ class CompanyRegistration(BaseModel):
     clerk_user_id: str
     company_name: str
     email: str
+    full_name: str | None = None
+    org_type: str | None = None
+    reason_for_access: str | None = None
 
 
 class CompanyStatusUpdate(BaseModel):
     status: str
     approved_by: str | None = None
+    rejection_reason: str | None = None
+
+
+class ContactMessage(BaseModel):
+    user_id: str | None = None
+    name: str
+    email: str
+    subject: str
+    message: str
+
+
+class ContactMessageStatusUpdate(BaseModel):
+    status: str
+
+
+class AuditLogEntry(BaseModel):
+    admin_clerk_id: str
+    action: str
+    target_company_id: int | None = None
+    target_message_id: int | None = None
+    notes: str | None = None
 
 
 # ==================================================
@@ -182,16 +298,32 @@ def home():
 # COMPANY REGISTRATION
 # ==================================================
 
+_ALLOWED_ORG_TYPES = {
+    "College",
+    "School",
+    "Business",
+    "Research Organization",
+    "Other",
+}
+
+
 @app.post("/api/companies/register")
 def register_company(data: CompanyRegistration):
     company_name = data.company_name.strip()
     email = data.email.strip().lower()
     clerk_user_id = data.clerk_user_id.strip()
+    full_name = data.full_name.strip() if data.full_name else None
+    org_type = data.org_type.strip() if data.org_type else None
+    reason_for_access = (
+        data.reason_for_access.strip()
+        if data.reason_for_access
+        else None
+    )
 
     if not company_name:
         raise HTTPException(
             status_code=400,
-            detail="Company name is required"
+            detail="Organization name is required"
         )
 
     if not email:
@@ -206,6 +338,12 @@ def register_company(data: CompanyRegistration):
             detail="Clerk user ID is required"
         )
 
+    if org_type and org_type not in _ALLOWED_ORG_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid organization type"
+        )
+
     with get_db_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
@@ -213,7 +351,10 @@ def register_company(data: CompanyRegistration):
                     id,
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status,
                     created_at,
                     approved_at,
@@ -228,7 +369,7 @@ def register_company(data: CompanyRegistration):
             if existing_company:
                 return {
                     "status": "already_registered",
-                    "message": "This company account is already registered",
+                    "message": "This account is already registered",
                     "company": dict(existing_company)
                 }
 
@@ -236,15 +377,21 @@ def register_company(data: CompanyRegistration):
                 INSERT INTO companies (
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status
                 )
-                VALUES (%s, %s, %s, 'pending')
+                VALUES (%s, %s, %s, %s, %s, %s, 'pending')
                 RETURNING
                     id,
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status,
                     created_at,
                     approved_at,
@@ -252,7 +399,10 @@ def register_company(data: CompanyRegistration):
             """, (
                 clerk_user_id,
                 company_name,
-                email
+                full_name,
+                email,
+                org_type,
+                reason_for_access,
             ))
 
             company = cursor.fetchone()
@@ -261,7 +411,7 @@ def register_company(data: CompanyRegistration):
 
     return {
         "status": "registered",
-        "message": "Company registered successfully. Waiting for admin approval.",
+        "message": "Access request submitted. Awaiting administrator approval.",
         "company": dict(company)
     }
 
@@ -275,8 +425,12 @@ def get_company_status(clerk_user_id: str):
                     id,
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status,
+                    rejection_reason,
                     created_at,
                     approved_at,
                     approved_by
@@ -289,7 +443,7 @@ def get_company_status(clerk_user_id: str):
     if company is None:
         raise HTTPException(
             status_code=404,
-            detail="Company registration not found"
+            detail="Registration not found"
         )
 
     return {
@@ -315,8 +469,12 @@ def get_all_companies(
                     id,
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status,
+                    rejection_reason,
                     created_at,
                     approved_at,
                     approved_by
@@ -357,7 +515,11 @@ def update_company_status(
             )
         )
 
-    approved_at = datetime.now(timezone.utc) if data.status == "approved" else None
+    approved_at = (
+        datetime.now(timezone.utc)
+        if data.status == "approved"
+        else None
+    )
 
     with get_db_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -366,14 +528,19 @@ def update_company_status(
                 SET
                     status = %s,
                     approved_at = %s,
-                    approved_by = %s
+                    approved_by = %s,
+                    rejection_reason = %s
                 WHERE id = %s
                 RETURNING
                     id,
                     clerk_user_id,
                     company_name,
+                    full_name,
                     email,
+                    org_type,
+                    reason_for_access,
                     status,
+                    rejection_reason,
                     created_at,
                     approved_at,
                     approved_by
@@ -381,6 +548,7 @@ def update_company_status(
                 data.status,
                 approved_at,
                 data.approved_by,
+                data.rejection_reason,
                 company_id
             ))
 
@@ -389,21 +557,242 @@ def update_company_status(
             if company is None:
                 raise HTTPException(
                     status_code=404,
-                    detail="Company not found"
+                    detail="Registration not found"
                 )
 
         connection.commit()
 
     return {
         "status": "updated",
-        "message": f"Company status changed to {data.status}",
+        "message": f"Status changed to {data.status}",
         "company": dict(company)
+    }
+
+
+# ==================================================
+# ADMIN AUDIT LOG
+# ==================================================
+
+@app.get("/api/admin/audit-log")
+def get_audit_log(
+    x_admin_key: str | None = Header(default=None)
+):
+    verify_admin(x_admin_key)
+
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                SELECT
+                    id,
+                    admin_clerk_id,
+                    action,
+                    target_company_id,
+                    target_message_id,
+                    notes,
+                    created_at
+                FROM admin_audit_log
+                ORDER BY created_at DESC
+                LIMIT 100
+            """)
+
+            entries = cursor.fetchall()
+
+    return {
+        "status": "success",
+        "count": len(entries),
+        "entries": [dict(e) for e in entries]
+    }
+
+
+@app.post("/api/admin/audit-log")
+def create_audit_log_entry(
+    data: AuditLogEntry,
+    x_admin_key: str | None = Header(default=None)
+):
+    verify_admin(x_admin_key)
+
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                INSERT INTO admin_audit_log (
+                    admin_clerk_id,
+                    action,
+                    target_company_id,
+                    target_message_id,
+                    notes
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, created_at
+            """, (
+                data.admin_clerk_id,
+                data.action,
+                data.target_company_id,
+                data.target_message_id,
+                data.notes,
+            ))
+
+            entry = cursor.fetchone()
+
+        connection.commit()
+
+    return {
+        "status": "logged",
+        "entry": dict(entry)
+    }
+
+
+# ==================================================
+# CONTACT MESSAGES
+# ==================================================
+
+@app.post("/api/contact")
+def submit_contact_message(data: ContactMessage):
+    name = data.name.strip()
+    email = data.email.strip().lower()
+    subject = data.subject.strip()
+    message = data.message.strip()
+
+    if not name or len(name) > 255:
+        raise HTTPException(
+            status_code=400,
+            detail="Name is required (max 255 characters)"
+        )
+
+    if not email or "@" not in email or len(email) > 255:
+        raise HTTPException(
+            status_code=400,
+            detail="A valid email address is required"
+        )
+
+    if not subject or len(subject) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="Subject is required (max 500 characters)"
+        )
+
+    if not message or len(message) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Message must be at least 10 characters"
+        )
+
+    if len(message) > 5000:
+        raise HTTPException(
+            status_code=400,
+            detail="Message must not exceed 5000 characters"
+        )
+
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                INSERT INTO contact_messages (
+                    user_id,
+                    name,
+                    email,
+                    subject,
+                    message,
+                    status
+                )
+                VALUES (%s, %s, %s, %s, %s, 'unread')
+                RETURNING id, created_at
+            """, (
+                data.user_id,
+                name,
+                email,
+                subject,
+                message,
+            ))
+
+            result = cursor.fetchone()
+
+        connection.commit()
+
+    return {
+        "status": "submitted",
+        "message": "Your message has been received. We will respond as soon as possible.",
+        "id": result["id"]
+    }
+
+
+@app.get("/api/admin/contact-messages")
+def get_contact_messages(
+    x_admin_key: str | None = Header(default=None)
+):
+    verify_admin(x_admin_key)
+
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                SELECT
+                    id,
+                    user_id,
+                    name,
+                    email,
+                    subject,
+                    message,
+                    status,
+                    created_at,
+                    updated_at
+                FROM contact_messages
+                ORDER BY created_at DESC
+            """)
+
+            messages = cursor.fetchall()
+
+    return {
+        "status": "success",
+        "count": len(messages),
+        "messages": [dict(m) for m in messages]
+    }
+
+
+@app.patch("/api/admin/contact-messages/{message_id}")
+def update_contact_message_status(
+    message_id: int,
+    data: ContactMessageStatusUpdate,
+    x_admin_key: str | None = Header(default=None)
+):
+    verify_admin(x_admin_key)
+
+    allowed_statuses = {"unread", "in_progress", "resolved"}
+
+    if data.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Use: unread, in_progress, or resolved"
+        )
+
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                UPDATE contact_messages
+                SET
+                    status = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                RETURNING id, status, updated_at
+            """, (data.status, message_id))
+
+            result = cursor.fetchone()
+
+            if result is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Message not found"
+                )
+
+        connection.commit()
+
+    return {
+        "status": "updated",
+        "message": dict(result)
     }
 
 
 # ==================================================
 # PREDICTION
 # ==================================================
+# DO NOT MODIFY — ML logic is fixed
 
 @app.post("/api/predict")
 def predict(data: SensorData):
@@ -591,12 +980,22 @@ def get_latest_reading():
 # ==================================================
 
 @app.get("/api/history")
-def get_history():
+def get_history(limit: int = 50, offset: int = 0):
+
+    # Clamp to reasonable bounds
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
 
     with get_db_connection() as connection:
         with connection.cursor(
             cursor_factory=RealDictCursor
         ) as cursor:
+            cursor.execute("""
+                SELECT COUNT(*) AS total
+                FROM sensor_readings
+            """)
+            total = cursor.fetchone()["total"]
+
             cursor.execute("""
                 SELECT
                     id,
@@ -610,27 +1009,32 @@ def get_history():
                     filter_status
                 FROM sensor_readings
                 ORDER BY id DESC
-                LIMIT 50
-            """)
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
 
             readings = cursor.fetchall()
 
     readings.reverse()
 
-    return [
-        {
-            "id": reading["id"],
-            "timestamp": reading["timestamp"],
-            "ph": reading["ph"],
-            "tds_mgl": reading["tds_mgl"],
-            "flow_lpm": reading["flow_lpm"],
-            "turbidity_ntu": reading["turbidity_ntu"],
-            "photodiode_mv": reading["photodiode_mv"],
-            "water_health": reading["water_health"],
-            "filter_status": reading["filter_status"]
-        }
-        for reading in readings
-    ]
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "readings": [
+            {
+                "id": reading["id"],
+                "timestamp": reading["timestamp"],
+                "ph": reading["ph"],
+                "tds_mgl": reading["tds_mgl"],
+                "flow_lpm": reading["flow_lpm"],
+                "turbidity_ntu": reading["turbidity_ntu"],
+                "photodiode_mv": reading["photodiode_mv"],
+                "water_health": reading["water_health"],
+                "filter_status": reading["filter_status"]
+            }
+            for reading in readings
+        ]
+    }
 
 
 # ==================================================

@@ -82,8 +82,11 @@ export default function Home() {
         }
 
         const result = await response.json();
+        const readings: HistoryReading[] = Array.isArray(result)
+          ? result
+          : (result?.readings ?? []);
 
-        setHistory(result);
+        setHistory(readings);
       } catch (err) {
         console.error(err);
       }
@@ -1440,12 +1443,11 @@ function MiniStat({
   label,
   color,
 }: {
-  icon: string;
+  icon?: string;
   value: string;
   label: string;
   color: "teal" | "violet" | "rose";
 }) {
-
   const styles = {
     teal: "bg-teal-50 text-teal-700 border-teal-100",
     violet:
@@ -1455,11 +1457,14 @@ function MiniStat({
   };
 
   return (
-
     <div
       className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 ${styles[color]}`}
     >
-
+      {icon && (
+        <span className="text-xs opacity-70">
+          {icon === "sensor" ? "⚡" : icon === "brain" ? "🧠" : "💾"}
+        </span>
+      )}
       <div className="text-xs font-black">
         {value}
       </div>
@@ -1469,9 +1474,7 @@ function MiniStat({
       <div className="text-[10px] font-bold">
         {label}
       </div>
-
     </div>
-
   );
 }
 
