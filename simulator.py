@@ -4,7 +4,7 @@ import time
 import urllib.request
 
 
-API_URL = "http://127.0.0.1:8000/api/sensor-data"
+API_URL = "http://127.0.0.1:8001/api/sensor-data"
 
 
 def generate_sensor_data():
