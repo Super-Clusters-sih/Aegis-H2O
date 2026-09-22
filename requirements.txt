@@ -1,10 +1,11 @@
+@"
 fastapi
 uvicorn
 pydantic
-pandas
 scikit-learn==1.9.1
 joblib
-sqlalchemy
+numpy
 psycopg2-binary
 python-dotenv
 email-validator
+"@ | Set-Content backend\requirements.txt

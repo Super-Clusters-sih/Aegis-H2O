@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pandas
+scikit-learn==1.9.1
+joblib
+sqlalchemy
+psycopg2-binary
+python-dotenv
+email-validator
