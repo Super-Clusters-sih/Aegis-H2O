@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import os
+import random
 
 import joblib
 import numpy as np
@@ -921,6 +922,22 @@ def predict(data: SensorData):
         },
         "database": "reading saved"
     }
+
+
+# ==================================================
+# DEMO SENSOR SIMULATION
+# ==================================================
+
+@app.post("/api/demo/simulate")
+def simulate_demo_reading():
+    data = SensorData(
+        ph=round(random.uniform(6.5, 8.5), 2),
+        tds_mgl=round(random.uniform(100, 800), 2),
+        flow_lpm=round(random.uniform(50, 500), 2),
+        turbidity_ntu=round(random.uniform(1, 10), 2),
+        photodiode_mv=round(random.uniform(500, 2500), 2),
+    )
+    return predict(data)
 
 
 # ==================================================

@@ -42,7 +42,7 @@ type HistoryReading = {
   filter_status: string;
 };
 
-export default function Home() {
+export default function Home({ demoMode = false }: { demoMode?: boolean }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [history, setHistory] = useState<HistoryReading[]>([]);
   const [error, setError] = useState(false);
@@ -92,16 +92,28 @@ export default function Home() {
       }
     };
 
-    fetchLatest();
-    fetchHistory();
+    const refresh = async () => {
+      if (demoMode) {
+        try {
+          await fetch("/api/demo/simulate", {
+            method: "POST",
+            cache: "no-store",
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      }
 
-    const interval = setInterval(() => {
-      fetchLatest();
-      fetchHistory();
-    }, 2000);
+      await fetchLatest();
+      await fetchHistory();
+    };
+
+    refresh();
+
+    const interval = setInterval(refresh, demoMode ? 10000 : 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [demoMode]);
 
   /* ============================================================
      SCROLL REVEAL
@@ -604,6 +616,13 @@ const chartData = history
 
             {/* STATUS */}
 
+            {demoMode && (
+              <div className="hidden items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-2 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-violet-500 animate-pulse" />
+                <span className="text-xs font-bold text-violet-700">Demo Mode</span>
+              </div>
+            )}
+
             <div
               className={`flex items-center gap-2 rounded-full border px-3 py-2 shadow-sm ${
                 error
@@ -634,7 +653,7 @@ const chartData = history
 
             </div>
 
-            <UserButton />
+            {!demoMode && <UserButton />}
           </div>
 
         </header>
@@ -680,7 +699,7 @@ const chartData = history
                   <span className="live-pulse h-2 w-2 rounded-full bg-teal-500" />
 
                   <span className="text-[10px] font-black tracking-[0.18em] text-teal-700">
-                    LIVE MONITORING
+                    {demoMode ? "LIVE DEMO SIMULATION" : "LIVE MONITORING"}
                   </span>
 
                 </div>
@@ -1137,7 +1156,7 @@ const chartData = history
                       </p>
 
                       <p className="mt-1 text-sm font-black text-slate-800">
-                        Every 2 seconds
+                        {demoMode ? "Every 10 seconds" : "Every 2 seconds"}
                       </p>
 
                     </div>

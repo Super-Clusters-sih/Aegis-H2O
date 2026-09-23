@@ -55,6 +55,15 @@ export default async function HomePage() {
               Create account
             </Link>
           </div>
+          <Link
+            href="/demo"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-teal-200 bg-teal-50 px-6 py-3 text-sm font-bold text-teal-700 transition hover:border-teal-300 hover:bg-teal-100 sm:w-auto"
+          >
+            Continue with Demo Account
+          </Link>
+          <p className="mt-3 text-xs text-slate-400">
+            Demo access for evaluation purposes only. No registration or admin approval required.
+          </p>
         </div>
       </main>
     );

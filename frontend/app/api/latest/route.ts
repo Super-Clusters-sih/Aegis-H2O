@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 const BACKEND_URL =
@@ -13,9 +14,11 @@ const BACKEND_URL =
  */
 export async function GET() {
   try {
+    const cookieStore = await cookies();
+    const isDemo = cookieStore.get("aegis_demo")?.value === "1";
     const { userId } = await auth();
 
-    if (!userId) {
+    if (!userId && !isDemo) {
       return NextResponse.json(
         { detail: "Authentication required" },
         { status: 401 }
@@ -25,7 +28,7 @@ export async function GET() {
     // Verify approval (admin bypasses this)
     const isAdmin = userId === process.env.AEGIS_ADMIN_CLERK_USER_ID;
 
-    if (!isAdmin) {
+    if (!isDemo && !isAdmin) {
       const statusRes = await fetch(
         `${BACKEND_URL}/api/companies/status/${encodeURIComponent(userId)}`,
         { cache: "no-store" }
